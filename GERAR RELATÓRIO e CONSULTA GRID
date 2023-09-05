@@ -1,0 +1,100 @@
+import sys
+import psycopg2
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QLineEdit, QRadioButton, QCheckBox, QPushButton, QComboBox, QWidget, QTableView, QBoxLayout
+from PyQt5.QtGui import QStandardItem, QStandardItemModel
+from PyQt5.uic import loadUi
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, TableStyle, Table
+
+
+db_config = {
+    "dbname": "clientes",
+    "user": "postgres",
+    "password": "1234",
+    "host": "localhost",
+    "port": "5432"
+}
+
+class MainWindow(QMainWindow):
+    #Método construtor
+    def __init__(self):
+        super().__init__()
+        loadUi("telaPrincipall.ui", self)
+
+        self.pushButton.clicked.connect(self.atualizar_tabela)
+        self.pushButton_2.clicked.connect(self.relatorio_banco)
+
+        self.connection = psycopg2.connect(**db_config)
+
+    def atualizar_tabela(self):
+        nome = self.lineEdit.text()
+        resultados = self.consultar_banco(nome)
+
+        self.mostrar_resultados(resultados)
+
+    #Faz a consulta no banco      
+    def consultar_banco(self, nome):
+        
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT * FROM cliente WHERE UPPER(nome) = %s", (nome.upper(),))
+            resultados = cursor.fetchall()
+            cursor.close()
+
+            return resultados
+
+    #Mostra resultados no GRID
+    def mostrar_resultados(self, resultados):
+        model = QStandardItemModel()
+        model.setHorizontalHeaderLabels(["nome","tipo","adimplente"])
+
+        for resultado in resultados:
+            row = [QStandardItem(str(item)) for item in resultado]
+            model.appendRow(row)
+    
+        self.tableView.setModel(model)
+    
+    
+    def relatorio_banco(self):
+        arquivo = 'cliente.pdf'
+
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT nome, tipo, adimplente FROM cliente")
+        relatorio = cursor.fetchall()
+
+       
+
+        #Criar variável que chamará a classe SIMPLEDOCETEMPLATE e passará como parâmetro: o nome da variável que você criou para guardar o nome do arquivo e a função pagesize=letter
+        doc = SimpleDocTemplate(arquivo, pagesize=letter)
+
+        style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ])
+
+        data = [['Nome', 'Tipo', 'Adimplente']]
+        for record in relatorio:
+            nome, tipo, adimplente = record
+            data.append([nome, tipo, adimplente])
+        table = Table(data)
+        table.setStyle(style)
+
+        # Adicionar a tabela ao documento PDF
+        doc.build([table])
+        print(f"Relatório gerado como {arquivo}")
+# Fechar conexão com o banco
+
+        #conn.close()
+
+
+#Função declarativa principal. O programa começa aqui
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    mainWindow = MainWindow()
+    mainWindow.show()
+    sys.exit(app.exec_())
